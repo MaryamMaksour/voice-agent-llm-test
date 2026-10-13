@@ -1,7 +1,8 @@
 """Step 2: run every scenario against every model and write a comparison report.
 
     python run_tests.py                                  # all models, scripted + simulated
-    python run_tests.py --models qwen3:8b --mode scripted
+    python run_tests.py --model qwen3:8b                 # only one model
+    python run_tests.py --models qwen3:8b,qwen3:14b --mode scripted
     python run_tests.py --only 03,08 --repeat 3          # some scenarios, simulated 3 times
 
 Output: runs/<timestamp>/report.md (+ summary.csv, results.csv, leads CSVs and conversation logs)
@@ -33,7 +34,8 @@ def slug(text: str) -> str:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--models", default=",".join(config.MODELS), help="comma-separated Ollama model tags")
+    p.add_argument("--model", "--models", dest="models", default=",".join(config.MODELS),
+                   help="one model (qwen3:8b) or several, comma-separated (qwen3:8b,qwen3:14b)")
     p.add_argument("--mode", choices=["scripted", "simulated", "both"], default="both")
     p.add_argument("--only", default="", help="run only scenarios whose id starts with these, e.g. 01,03")
     p.add_argument("--repeat", type=int, default=1, help="repeat simulated calls (the caller varies each time)")
@@ -60,11 +62,10 @@ def main() -> int:
         print("Missing models, pull them first:\n" + "\n".join(f"  ollama pull {m}" for m in missing))
         return 1
     if "simulated" in modes and not have(args.caller_model):
-        print(f"Caller model {args.caller_model} is not pulled; running scripted mode only "
-              f"(or: ollama pull {args.caller_model})")
-        modes = [m for m in modes if m != "simulated"]
-        if not modes:
-            return 1
+        # testing a single model is common: let it also play the customer instead of skipping the mode
+        print(f"Note: caller model {args.caller_model} is not pulled, so {models[0]} will play the customer "
+              f"in simulated mode (for a fixed caller across models: ollama pull {args.caller_model})")
+        args.caller_model = models[0]
 
     run_dir = os.path.join(config.RUNS_DIR, datetime.now().strftime("%Y%m%d-%H%M%S"))
     os.makedirs(run_dir, exist_ok=True)

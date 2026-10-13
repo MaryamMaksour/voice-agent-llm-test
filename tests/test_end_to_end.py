@@ -55,6 +55,27 @@ class EndToEnd(unittest.TestCase):
         finally:
             shutil.rmtree(runs)
 
+    def test_single_model_with_only_that_model_pulled(self):
+        """python run_tests.py --model qwen3:8b, when the default caller model (qwen3:14b) is not pulled."""
+        runs = tempfile.mkdtemp()
+        try:
+            with FakeOllama(good_agent_policy, models=("qwen3:8b",)) as fake:
+                env = os.environ | {"OLLAMA_URL": fake.url, "RUNS_DIR": runs}
+                out = subprocess.run([sys.executable, "run_tests.py", "--model", "qwen3:8b", "--only", "01"],
+                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+                check = subprocess.run([sys.executable, "check_server.py", "--model", "qwen3:8b"],
+                                       cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+            self.assertIn("qwen3:8b will play the customer", out.stdout)
+            self.assertIn("scripted     01_qualified_full", out.stdout)
+            self.assertIn("simulated    01_qualified_full", out.stdout)
+            self.assertNotIn("qwen3:14b ", out.stdout.split("Note:")[0])
+            self.assertEqual(check.returncode, 0, check.stdout)
+            self.assertIn("[ OK ]    qwen3:8b", check.stdout)
+            self.assertNotIn("[MISSING]", check.stdout)
+        finally:
+            shutil.rmtree(runs)
+
     def test_missing_model_is_reported(self):
         with FakeOllama(good_agent_policy, models=("qwen3:8b",)) as fake:
             out = subprocess.run([sys.executable, "run_tests.py", "--models", "qwen3:14b"], cwd=ROOT,

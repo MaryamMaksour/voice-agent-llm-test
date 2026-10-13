@@ -145,11 +145,14 @@ python check_server.py
 # from your laptop instead (Windows PowerShell: $env:OLLAMA_URL="http://<server-ip>:11434"):
 OLLAMA_URL=http://<server-ip>:11434 python check_server.py
 ```
-`check_server.py` confirms that Ollama is reachable, that every model is pulled, and that **each model can make a tool call**.
+`check_server.py` confirms that Ollama is reachable, that every model is pulled, and that **each model can make a tool call**. To check one model only: `python check_server.py --model qwen3:8b`.
+
+**Testing just one model** (for example, only `qwen3:8b` is pulled): `python run_tests.py --model qwen3:8b`. In simulated mode the customer is normally played by `qwen3:14b`. If that model isn't pulled, the tested model plays the customer too, so nothing is skipped. For a fixed customer across models, pull `qwen3:14b` as well.
 
 ```bash
 python run_tests.py                          # 3 models × (scripted + simulated) × 12 scenarios
-python run_tests.py --models qwen3:8b        # one model
+python run_tests.py --model qwen3:8b         # only one model
+python run_tests.py --models qwen3:8b,qwen3:14b   # a chosen set of models
 python run_tests.py --mode scripted          # fast, fully repeatable
 python run_tests.py --only 03,08,10          # only the callback scenarios
 python run_tests.py --mode simulated --repeat 3   # consistency check
