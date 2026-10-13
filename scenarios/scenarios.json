@@ -1,0 +1,291 @@
+[
+ {
+  "id": "01_qualified_full",
+  "lead_id": "L001",
+  "what_it_tests": "Collects all four details, sets qualified and hot",
+  "script": [
+   "Hello?",
+   "Yes, this is Sarah.",
+   "Yes, I'm still interested.",
+   "Around two million dirhams.",
+   "Dubai Marina, close to the beach.",
+   "A two bedroom apartment.",
+   "Within the next two months.",
+   "Great, thank you. Bye."
+  ],
+  "persona": "Your name is Sarah Johnson. You enquired about Marina Vista Residences and you are still interested. Budget: around two million dirhams. Area: Dubai Marina, close to the beach. Type: a two bedroom apartment. Timeline: within the next two months. You are friendly and answer every question.",
+  "expected": {
+   "status": "qualified",
+   "budget_aed": 2000000,
+   "preferred_area": [
+    "Marina"
+   ],
+   "property_type": "apartment",
+   "timeline": true,
+   "interest_level": "hot",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "02_not_interested",
+  "lead_id": "L002",
+  "what_it_tests": "Sets not_interested and saves nothing else",
+  "script": [
+   "Hello?",
+   "Speaking.",
+   "No, sorry, we already bought a house last month. Not interested.",
+   "Thanks, bye."
+  ],
+  "persona": "Your name is Michael Chen. You enquired about Palm Gardens Villas but you already bought a house last month, so you are not interested. Be polite and short.",
+  "expected": {
+   "status": "not_interested",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "03_callback_tomorrow",
+  "lead_id": "L003",
+  "what_it_tests": "Turns 'tomorrow at four' into the right date and time",
+  "script": [
+   "Hello?",
+   "Yes, but I'm driving right now.",
+   "Call me tomorrow at four in the afternoon.",
+   "Thanks, bye."
+  ],
+  "persona": "Your name is Emily Davis. You are driving and cannot talk. When asked for a better time, say: tomorrow at four in the afternoon. Do not discuss anything else.",
+  "expected": {
+   "status": "callback",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": "2026-10-15T16:00",
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "04_do_not_call",
+  "lead_id": "L004",
+  "what_it_tests": "Respects 'stop calling me'",
+  "script": [
+   "Hello?",
+   "Yes. Please stop calling me and take my number off your list.",
+   "Bye."
+  ],
+  "persona": "Your name is James Wilson. You are annoyed by sales calls. As soon as you know it is a real estate call, ask them to stop calling you and remove your number, then hang up.",
+  "expected": {
+   "status": "do_not_call",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": null,
+   "do_not_call": true
+  }
+ },
+ {
+  "id": "05_wrong_number",
+  "lead_id": "L005",
+  "what_it_tests": "Wrong number: no data saved about the lead",
+  "script": [
+   "Hello?",
+   "No, there's no Olivia here. You have the wrong number.",
+   "Bye."
+  ],
+  "persona": "Your name is Karim. There is no Olivia at this number. Tell the caller it is the wrong number.",
+  "expected": {
+   "status": "wrong_number",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "06_interested_partial",
+  "lead_id": "L006",
+  "what_it_tests": "Partial info: interested (not qualified), no invented budget",
+  "script": [
+   "Hello?",
+   "Yes, hi.",
+   "Yes, we need a bigger office for our company.",
+   "I need to check the budget with my partner first, I can't say now.",
+   "Business Bay is ideal.",
+   "Probably in about six months.",
+   "Sure, thanks. Bye."
+  ],
+  "persona": "Your name is David Miller. You enquired about Business Bay Office Tower and you need a bigger office for your company. You do NOT know the budget yet (you must check with your partner), so refuse to give a number. Area: Business Bay. Type: office. Timeline: in about six months.",
+  "expected": {
+   "status": "interested",
+   "budget_aed": null,
+   "preferred_area": [
+    "Business Bay"
+   ],
+   "property_type": "office",
+   "timeline": true,
+   "interest_level": "warm",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "07_villa_budget_range",
+  "lead_id": "L007",
+  "what_it_tests": "Budget range: saves the upper limit",
+  "script": [
+   "Hello?",
+   "Yes it is.",
+   "Yes, very much.",
+   "Somewhere between five and six million dirhams.",
+   "Dubai Hills.",
+   "A villa with a garden, four bedrooms.",
+   "In about eight months.",
+   "Thank you, bye."
+  ],
+  "persona": "Your name is Sophia Garcia. You are interested in Dubai Hills Villas. Budget: between five and six million dirhams. Area: Dubai Hills. Type: a four bedroom villa with a garden. Timeline: in about eight months.",
+  "expected": {
+   "status": "qualified",
+   "budget_aed": 6000000,
+   "preferred_area": [
+    "Dubai Hills"
+   ],
+   "property_type": "villa",
+   "timeline": true,
+   "interest_level": "warm",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "08_callback_next_monday",
+  "lead_id": "L008",
+  "what_it_tests": "Turns 'next Monday at ten' into the right date",
+  "script": [
+   "Hello?",
+   "Yeah.",
+   "Maybe, but I'm in a meeting. Call me next Monday at ten in the morning.",
+   "OK, bye."
+  ],
+  "persona": "Your name is Daniel Martinez. You are in a meeting. Ask them to call you next Monday at ten in the morning.",
+  "expected": {
+   "status": "callback",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": "2026-10-19T10:00",
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "09_cold_but_complete",
+  "lead_id": "L009",
+  "what_it_tests": "All details known but far timeline: qualified and cold",
+  "script": [
+   "Hello?",
+   "Yes.",
+   "Kind of. I'm just browsing for now, maybe in two years.",
+   "A townhouse.",
+   "Around one point two million dirhams.",
+   "Jumeirah Village Circle.",
+   "Thanks, bye."
+  ],
+  "persona": "Your name is Ava Anderson. You are just browsing; you might buy in about two years. Type: townhouse. Budget: around one point two million dirhams. Area: Jumeirah Village Circle.",
+  "expected": {
+   "status": "qualified",
+   "budget_aed": 1200000,
+   "preferred_area": [
+    "Jumeirah Village Circle",
+    "JVC"
+   ],
+   "property_type": "townhouse",
+   "timeline": true,
+   "interest_level": "cold",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "10_relative_answers",
+  "lead_id": "L010",
+  "what_it_tests": "Someone else answers: callback only, no property talk",
+  "script": [
+   "Hello?",
+   "No, this is his wife. Benjamin isn't home right now.",
+   "Try tomorrow evening after six.",
+   "Bye."
+  ],
+  "persona": "You are Benjamin Clark's wife. Benjamin is not home. If asked when to call, say tomorrow evening after six. You know nothing about his property plans.",
+  "expected": {
+   "status": "callback",
+   "budget_aed": null,
+   "preferred_area": null,
+   "property_type": null,
+   "timeline": null,
+   "interest_level": null,
+   "callback_at": "2026-10-15T18:00",
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "11_price_question",
+  "lead_id": "L011",
+  "what_it_tests": "Asks for prices: agent must not invent; area 'anywhere' not saved",
+  "script": [
+   "Hello?",
+   "Yes. How much are the villas?",
+   "OK. My maximum budget is three million dirhams.",
+   "A villa.",
+   "I don't mind the area, anywhere quiet.",
+   "Within six months.",
+   "OK, bye."
+  ],
+  "persona": "Your name is Mia Jackson. First ask how much the villas cost. Your maximum budget is three million dirhams. Type: villa. Area: you don't mind, anywhere quiet (do not name an area). Timeline: within six months.",
+  "expected": {
+   "status": "interested",
+   "budget_aed": 3000000,
+   "preferred_area": null,
+   "property_type": "villa",
+   "timeline": true,
+   "interest_level": "warm",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ },
+ {
+  "id": "12_everything_at_once",
+  "lead_id": "L012",
+  "what_it_tests": "Lead gives all details in one sentence",
+  "script": [
+   "Hello?",
+   "Yes, Henry here. I'm looking for a three bedroom penthouse in Downtown, my budget is about eight million dirhams, and I want to buy within a month.",
+   "Perfect, thanks. Bye."
+  ],
+  "persona": "Your name is Henry Young. In your first real answer, volunteer everything at once: a three bedroom penthouse in Downtown, budget about eight million dirhams, buying within a month.",
+  "expected": {
+   "status": "qualified",
+   "budget_aed": 8000000,
+   "preferred_area": [
+    "Downtown"
+   ],
+   "property_type": "penthouse",
+   "timeline": true,
+   "interest_level": "hot",
+   "callback_at": null,
+   "do_not_call": false
+  }
+ }
+]

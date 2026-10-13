@@ -1,0 +1,5 @@
+runs/
+data/leads_live.csv
+__pycache__/
+*.pyc
+*.tmp
