@@ -79,7 +79,8 @@ class OllamaClient:
         return [m["name"] for m in self._get("/api/tags").get("models", [])]
 
     def chat(self, model: str, messages: list[dict], tools: list | None = None,
-             temperature: float = 0.2, num_ctx: int = 8192, think: bool = False) -> ChatResult:
+             temperature: float = 0.2, num_ctx: int = 8192, think: bool = False,
+             fmt: dict | None = None) -> ChatResult:
         body = {
             "model": model,
             "messages": messages,
@@ -89,6 +90,8 @@ class OllamaClient:
         }
         if tools:
             body["tools"] = tools
+        if fmt:
+            body["format"] = fmt  # JSON schema: Ollama forces the reply into this shape
         t0 = time.perf_counter()
         try:
             data = self._post("/api/chat", body)

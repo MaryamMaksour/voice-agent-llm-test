@@ -39,6 +39,8 @@ Each model has text conversations with leads, the same as phone calls but withou
 | Ollama client | `llmtest/ollama_client.py` | `/api/chat` with tools and thinking off; removes `<think>` text; also reads tool calls the model writes as text; retries without the think flag on old Ollama versions |
 | CRM | `llmtest/crm.py` | Leads CSV: validated updates, atomic saves (never a half-written file), one row per lead |
 | Tools | `llmtest/tools.py` | `update_lead`, `schedule_callback`, `mark_do_not_call`, `end_call`. Bound to **one lead**, so the model can't touch other rows. Invalid values return a message the model can fix |
+| Business rules | `llmtest/rules.py` | Decisions taken in code, not by the model: lead status, interest level, callback date, vague areas, price guard (see below) |
+| Post-call check | `llmtest/postcall.py` | After each call, reads the conversation once more and fills in details that were said but not saved |
 | Prompts | `llmtest/prompts.py` | Agent system prompt (the product) and caller persona prompt (the test driver) |
 | Agent | `llmtest/agent.py` | One model + one lead: message history, tool-calling loop |
 | Callers | `llmtest/callers.py` | `ScriptedCaller` (fixed lines), `SimulatedCaller` (an LLM plays the lead), `HumanCaller` (you) |
@@ -53,7 +55,22 @@ Each model has text conversations with leads, the same as phone calls but withou
 3. The **caller** says "Hello?". The agent replies, and calls tools when it learns facts.
 4. Every tool call is **validated** and written to the CSV immediately. An invalid value (for example `property_type="castle"`) is not saved; the model gets an error message and can try again.
 5. The call ends when the agent calls `end_call` (which saves a summary into `notes`), when the lead hangs up (the agent gets one last turn), or after `MAX_TURNS` replies.
-6. The **final CSV row** is compared with the scenario's expected result, and everything is logged.
+6. The **post-call check** fills any empty detail the lead clearly gave (it never overwrites what the agent saved).
+7. The **final CSV row** is compared with the scenario's expected result, and everything is logged.
+
+### Business rules in code
+The first `qwen3:8b` run showed the model understands the lead well but is unreliable at some decisions, so the code takes them over. The production agent works the same way.
+
+| Rule | What the code does | Fixes (first 8B run) |
+|---|---|---|
+| Status | `qualified` when budget, area, type and timeline are all saved; `interested` when some are. Final outcomes (not interested, callback, do-not-call, wrong number) are never changed | 01, 06, 07, 09, 11, 12 |
+| Interest level | Worked out from the timeline: within 3 months = hot, 3 to 12 months = warm, more than 12 months or unsure = cold | 09, 12 |
+| Callback date | The model passes the day as said ("next monday", "tomorrow") and the time; the code works out the exact date | 08 |
+| Area | "Anywhere", "I don't mind" and similar are never saved as an area | 11 |
+| Price guard | A spoken sentence with an amount of money the lead never said is replaced by "A property consultant will share the exact prices and details with you." | 11 |
+| Post-call check | One more model pass over the conversation fills details that were said but not saved | 12 |
+
+The report shows how often the code had to step in (**Price guard** and **Post-call fills** columns), and every log shows it as `[note]` lines. To measure what the model saves on its own, run with `--no-post-call`.
 
 ### Two test modes
 | Mode | The lead is played by | Why |
@@ -156,6 +173,7 @@ python run_tests.py --models qwen3:8b,qwen3:14b   # a chosen set of models
 python run_tests.py --mode scripted          # fast, fully repeatable
 python run_tests.py --only 03,08,10          # only the callback scenarios
 python run_tests.py --mode simulated --repeat 3   # consistency check
+python run_tests.py --model qwen3:8b --no-post-call   # the model alone, without the post-call check
 ```
 On slow hardware a full run takes a while. That's fine, because this test is about quality, not speed.
 
@@ -201,6 +219,7 @@ Always open a few logs, not just the numbers. They show *why* a model failed: a 
 | `AGENT_TEMPERATURE` | `0.2` | Low = consistent agent |
 | `MAX_TURNS` | `16` | Agent replies before a call is stopped |
 | `REQUEST_TIMEOUT` | `600` s | Generous for slow servers |
+| `POST_CALL_CHECK` | `1` | `0` turns the post-call check off |
 
 ## 9. Self-tests (no server needed)
 ```bash

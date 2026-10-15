@@ -121,7 +121,8 @@ class PromptTests(unittest.TestCase):
     def test_prompt_has_lead_context_and_date(self):
         lead = {"name": "Sarah Johnson", "project_interest": "Marina Vista Residences", "status": "new"}
         p = agent_system_prompt(lead, company="Bayari", agent_name="Sara", now=NOW, currency="AED", model="qwen3:8b")
-        for text in ("Sarah", "Marina Vista Residences", "Wednesday 14 October 2026", "2026-10-15T16:00", "/no_think"):
+        for text in ("Sarah", "Marina Vista Residences", "Wednesday 14 October 2026", "Am I speaking with Sarah?",
+                     'schedule_callback(day="tomorrow", time="16:00")', "/no_think"):
             self.assertIn(text, p)
         self.assertNotIn("/no_think",
                          agent_system_prompt(lead, company="B", agent_name="S", now=NOW, currency="AED", model="gpt-oss"))

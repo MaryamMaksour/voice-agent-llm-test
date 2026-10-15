@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from .crm import CsvCRM
 from .ollama_client import OllamaClient
 from .prompts import agent_system_prompt
+from .rules import guard_money, money_amounts
 from .tools import TOOL_SCHEMAS, ToolExecutor
 
 
@@ -18,6 +20,7 @@ class AgentTurn:
     ended: bool = False
     model_seconds: float = 0.0
     error: str = ""
+    guarded: list = field(default_factory=list)  # sentences removed by the money guard
 
 
 class Agent:
@@ -44,14 +47,24 @@ class Agent:
             res = self.client.chat(self.model, self.messages, tools=TOOL_SCHEMAS,
                                    temperature=self.temperature, num_ctx=self.num_ctx)
             turn.model_seconds += res.seconds
+            content = res.content
+            if content:
+                content, removed = guard_money(content, self._lead_amounts())
+                if removed:
+                    # the history must match what the lead heard, or the model repeats the price later;
+                    # keep any tool call the model wrote as text
+                    blocks = re.findall(r"<tool_call>.*?</tool_call>", res.raw_message["content"], re.DOTALL)
+                    res.raw_message["content"] = "\n".join([content, *blocks])
+                    turn.guarded.extend(removed)
             self.messages.append(res.raw_message)
-            if res.content:
-                spoken.append(res.content)
+            if content:
+                spoken.append(content)
             if not res.tool_calls:
                 break
             for call in res.tool_calls:
                 result = self.tools.execute(call["name"], call["arguments"])
-                turn.tool_events.append({"tool": call["name"], "args": call["arguments"], "result": result})
+                turn.tool_events.append({"tool": call["name"], "args": call["arguments"], "result": result,
+                                         "rules": self.tools.last_rules})
                 self.messages.append({"role": "tool", "content": result, "tool_name": call["name"]})
             if self.tools.ended:
                 break  # end_call was the last action; whatever was said before it is the goodbye
@@ -60,3 +73,11 @@ class Agent:
         turn.text = " ".join(spoken).strip()
         turn.ended = self.tools.ended
         return turn
+
+    def _lead_amounts(self) -> set[int]:
+        """Amounts of money the lead said (the agent may repeat those, e.g. to confirm the budget)."""
+        amounts: set[int] = set()
+        for m in self.messages:
+            if m["role"] == "user":
+                amounts |= money_amounts(m["content"])
+        return amounts

@@ -59,12 +59,16 @@ def conduct_checks(events: list[dict], ended_by: str) -> dict:
             invented.append(e["text"])
     tool_errors = [e for e in events if e["type"] == "tool" and
                    (e["result"].startswith("Not saved") or e["result"].startswith("Unknown tool"))]
+    notes = [e["text"] for e in events if e["type"] == "note"]
     return {
         "ended_with_end_call": ended_by == "end_call",
         "short_replies_share": round(short, 2),
         "one_question_share": round(one_q, 2),
         "invented_money_lines": invented,
         "tool_errors": len(tool_errors),
+        # how often the code had to step in (shown so a model's own quality stays visible)
+        "price_guard": sum(n.startswith("guard:") for n in notes),
+        "post_call_fills": sum(1 for n in notes if n.startswith("post-call check:") and "=" in n),
     }
 
 

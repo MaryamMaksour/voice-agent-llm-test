@@ -18,6 +18,7 @@ from llmtest.callers import HumanCaller
 from llmtest.conversation import run_call
 from llmtest.crm import CsvCRM
 from llmtest.ollama_client import OllamaClient
+from llmtest.postcall import post_call_check
 from llmtest.transcript import Transcript
 
 LIVE_CSV = "data/leads_live.csv"
@@ -33,6 +34,10 @@ class PrintingTranscript(Transcript):
     def tool(self, name: str, args: dict, result: str) -> None:
         super().tool(name, args, result)
         print(f"        [{name} {json.dumps(args, ensure_ascii=False)} -> {result}]")
+
+    def note(self, text: str) -> None:
+        super().note(text)
+        print(f"        [{text}]")
 
 
 def main() -> None:
@@ -58,6 +63,9 @@ def main() -> None:
     log = PrintingTranscript(os.path.join(config.RUNS_DIR, "chat"), name,
                              {"model": args.model, "lead": f"{args.lead} {lead['name']}", "now": now.isoformat()})
     call = run_call(agent, HumanCaller(), log, max_turns=50)
+    if config.POST_CALL_CHECK and call.ended_by != "error":
+        _, line = post_call_check(client, args.model, crm, args.lead, log.events, num_ctx=config.NUM_CTX)
+        log.note(line)
     row = crm.get(args.lead)
     log.close({"ended_by": call.ended_by, "final_crm_row": json.dumps(row, ensure_ascii=False)})
     print("\nCRM row now:")

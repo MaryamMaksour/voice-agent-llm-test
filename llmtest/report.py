@@ -30,6 +30,8 @@ def summarize(results: list[dict], target_acc: float, target_pass: float) -> lis
             "one_question": round(sum(c["one_question_share"] for c in conduct) / len(conduct), 2),
             "invented_money": sum(len(c["invented_money_lines"]) for c in conduct),
             "tool_errors": sum(c["tool_errors"] for c in conduct),
+            "price_guard": sum(c.get("price_guard", 0) for c in conduct),
+            "post_call_fills": sum(c.get("post_call_fills", 0) for c in conduct),
             "errors": sum(1 for r in rs if r["ended_by"] == "error"),
             "avg_seconds_per_reply": round(sum(r["model_seconds"] for r in rs) / max(replies, 1), 2),
             "verdict": "GOOD ENOUGH" if acc >= target_acc and pass_rate >= target_pass else "NOT ENOUGH",
@@ -55,14 +57,17 @@ def write_reports(run_dir: str, results: list[dict], summary: list[dict], meta: 
     lines = [f"# LLM test report", "", *(f"- **{k}:** {v}" for k, v in meta.items()), "",
              "## Summary", "",
              "| Model | Calls | Field accuracy | Scenarios passed | Ended properly | Short replies | One question | "
-             "Invented money | Tool errors | Sec/reply | Verdict |",
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+             "Invented money | Tool errors | Price guard | Post-call fills | Sec/reply | Verdict |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in summary:
         lines.append(f"| {s['model']} | {s['calls']} | {s['field_accuracy']:.1%} | {s['scenarios_passed']} | "
                      f"{s['ended_properly']}/{s['calls']} | {s['short_replies']:.0%} | {s['one_question']:.0%} | "
-                     f"{s['invented_money']} | {s['tool_errors']} | {s['avg_seconds_per_reply']} | **{s['verdict']}** |")
+                     f"{s['invented_money']} | {s['tool_errors']} | {s['price_guard']} | {s['post_call_fills']} | "
+                     f"{s['avg_seconds_per_reply']} | **{s['verdict']}** |")
     lines += ["", "Targets: field accuracy ≥ 95% and ≥ 90% of scenarios passed. "
-              "Sec/reply depends on the hardware and is shown for information only.", "",
+              "Sec/reply depends on the hardware and is shown for information only. "
+              "Price guard = replies where the code removed a price the lead never gave. "
+              "Post-call fills = calls where the post-call check added details the agent did not save.", "",
               "## Failed scenarios", ""]
     for r in results:
         if not r["evaluation"]["passed"]:

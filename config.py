@@ -27,6 +27,10 @@ MAX_TURNS = int(os.getenv("MAX_TURNS", "16"))        # agent replies per call be
 MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "6"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "600"))  # slow hardware is fine, we test quality
 
+# After each call, read the conversation once more and fill in details that were said but not saved
+# (the production agent does the same). Turn off with POST_CALL_CHECK=0 or run_tests.py --no-post-call.
+POST_CALL_CHECK = os.getenv("POST_CALL_CHECK", "1") not in ("0", "false", "no")
+
 LEADS_SEED = os.getenv("LEADS_SEED", "data/leads.csv")
 SCENARIOS_FILE = os.getenv("SCENARIOS_FILE", "scenarios/scenarios.json")
 RUNS_DIR = os.getenv("RUNS_DIR", "runs")

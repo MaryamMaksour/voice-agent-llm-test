@@ -7,8 +7,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from .crm import INTEREST_LEVELS, PROPERTY_TYPES, CRMError, CsvCRM
+from .rules import apply_rules, is_vague_area, resolve_callback
 
-STATUS_CHOICES = ["interested", "qualified", "not_interested", "wrong_number"]
+# "qualified" is not offered: the code sets it once all four details are known (rules.derive_status)
+STATUS_CHOICES = ["interested", "not_interested", "wrong_number"]
 
 TOOL_SCHEMAS = [
     {
@@ -16,17 +18,19 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "update_lead",
             "description": "Save facts about the lead to the CRM as soon as the lead says them. "
-                           "Pass only the fields you just learned.",
+                           "Pass EVERY field the lead just gave, all in this one call.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "status": {"type": "string", "enum": STATUS_CHOICES,
-                               "description": "Lead status after what the lead said."},
+                               "description": "Only for: not interested, or wrong number. "
+                                              "Interested and qualified are set automatically."},
                     "budget_aed": {"type": "integer",
                                    "description": "Budget in whole UAE dirhams, e.g. 2000000. "
                                                   "For a range, use the upper limit."},
                     "preferred_area": {"type": "string",
-                                       "description": "Area the lead wants, in their words, e.g. 'Dubai Marina'."},
+                                       "description": "Area the lead wants, e.g. 'Dubai Marina'. "
+                                                      "Leave out if the lead does not mind the area."},
                     "property_type": {"type": "string", "enum": PROPERTY_TYPES},
                     "timeline": {"type": "string",
                                  "description": "When they plan to buy, in their words, e.g. 'within 3 months'."},
@@ -45,10 +49,14 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "datetime": {"type": "string",
-                                 "description": "Agreed day and time as YYYY-MM-DDTHH:MM (24-hour, Dubai time)."},
+                    "day": {"type": "string",
+                            "description": "The day the lead said: 'today', 'tomorrow', a weekday such as "
+                                           "'monday' (means the next Monday), or a date YYYY-MM-DD."},
+                    "time": {"type": "string",
+                             "description": "The time as HH:MM, 24-hour, e.g. '16:00'. Morning = 10:00, "
+                                            "afternoon = 15:00, evening = 18:00."},
                 },
-                "required": ["datetime"],
+                "required": ["day", "time"],
             },
         },
     },
@@ -85,24 +93,36 @@ class ToolExecutor:
         self.now = now
         self.ended = False
         self.actions: list[dict] = []  # audit trail of every successful CRM write
+        self.last_rules: dict = {}     # what the business rules changed after the last tool call
 
     def execute(self, name: str, args: dict) -> str:
         """Run one tool. Always returns a short text result for the model (errors included)."""
+        self.last_rules = {}
         try:
             if name == "update_lead":
+                args = dict(args)
+                note = ""
+                if is_vague_area(str(args.get("preferred_area") or "")):
+                    args.pop("preferred_area")
+                    note = " Area not saved: the lead has no preferred area."
                 row_before = self.crm.get(self.lead_id)
                 self.crm.update(self.lead_id, args)
                 changed = {k: v for k, v in args.items() if v not in (None, "") and str(row_before.get(k)) != str(v)}
                 self._log(name, args)
-                return f"Saved: {', '.join(changed) or 'no change'}."
+                self.last_rules = apply_rules(self.crm, self.lead_id)
+                if self.last_rules:
+                    self._log("rules", self.last_rules)
+                return f"Saved: {', '.join(changed) or 'no change'}.{note}"
             if name == "schedule_callback":
-                raw = str(args.get("datetime", "")).strip()
                 try:
-                    when = datetime.fromisoformat(raw[:16])
-                except ValueError:
-                    return "Not saved: datetime must look like 2026-10-15T16:00. Ask the lead for the day and time."
-                if when <= self.now:
-                    return f"Not saved: {raw} is in the past (now is {self.now:%Y-%m-%d %H:%M}). Confirm the day and time."
+                    if args.get("day"):
+                        when = resolve_callback(str(args["day"]), str(args.get("time", "")), self.now)
+                    else:  # older form: one ISO datetime
+                        when = datetime.fromisoformat(str(args.get("datetime", "")).strip()[:16])
+                        if when <= self.now:
+                            raise ValueError(f"{when:%Y-%m-%d %H:%M} is in the past (now is {self.now:%Y-%m-%d %H:%M})")
+                except ValueError as e:
+                    return f"Not saved: {e}. Ask the lead for the day and time."
                 self.crm.schedule_callback(self.lead_id, when)
                 self._log(name, {"datetime": when.strftime("%Y-%m-%dT%H:%M")})
                 return f"Callback booked for {when:%A %d %B at %H:%M}."

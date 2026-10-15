@@ -32,6 +32,10 @@ def run_call(agent: Agent, caller, transcript: Transcript, max_turns: int) -> Ca
         total_seconds += turn.model_seconds
         for ev in turn.tool_events:
             transcript.tool(ev["tool"], ev["args"], ev["result"])
+            if ev.get("rules"):
+                transcript.note("rules set: " + ", ".join(f"{k}={v}" for k, v in ev["rules"].items()))
+        for sentence in turn.guarded:
+            transcript.note(f"guard: removed a price the lead never gave: {sentence!r}")
         transcript.agent(turn.text or "(no spoken reply)", turn.model_seconds)
         if turn.error:
             transcript.note(turn.error)
