@@ -56,6 +56,7 @@ class ToolTests(Base):
 
     def test_end_call_saves_summary(self):
         t = ToolExecutor(self.crm, "L001", NOW)
+        t.last_lead_text = "Thanks, bye."
         t.execute("end_call", {"summary": "Wants a 2-bed in the Marina."})
         self.assertTrue(t.ended)
         self.assertEqual(self.crm.get("L001")["notes"], "Wants a 2-bed in the Marina.")

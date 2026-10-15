@@ -100,6 +100,32 @@ def is_vague_area(text: str) -> bool:
     return bool(_VAGUE_AREA.search(text or ""))
 
 
+# --- placeholder values ------------------------------------------------------------------------
+
+_PLACEHOLDER = re.compile(r"^\s*(unknown|n/?a|none|null|not (?:given|specified|provided|known|sure)|tbd|-+|\?+)\s*$",
+                          re.I)
+
+
+def is_placeholder(key: str, value) -> bool:
+    """'unknown', 'n/a', budget 0 ... mean 'the lead did not say': drop them instead of rejecting the update."""
+    if value is None:
+        return True
+    if key == "budget_aed" and isinstance(value, (int, float)) and value <= 0:
+        return True
+    return isinstance(value, str) and (not value.strip() or bool(_PLACEHOLDER.match(value)))
+
+
+# --- ending the call -----------------------------------------------------------------------------
+
+_LEAD_WANTS_TO_STOP = re.compile(
+    r"\b(bye|goodbye|good bye|have to go|got to go|gotta go|busy|driving|in a meeting|not now|call (?:me )?later|"
+    r"stop|that'?s (?:all|it)|no more|hang up|not interested|no thanks?|leave me)\b", re.I)
+
+
+def lead_wants_to_stop(text: str) -> bool:
+    return bool(_LEAD_WANTS_TO_STOP.search(text or ""))
+
+
 # --- callback date and time ----------------------------------------------------------------------
 
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -205,3 +231,17 @@ def guard_money(text: str, allowed: set[int]) -> tuple[str, list[str]]:
         else:
             kept.append(s)
     return (" ".join(k for k in kept if k).strip(), removed) if removed else (text, [])
+
+
+# --- tool talk guard -----------------------------------------------------------------------------
+
+_TOOL_TALK = re.compile(r"\b(update_lead|schedule_callback|mark_do_not_call|end_call|tool call|the crm)\b", re.I)
+
+
+def guard_tool_talk(text: str) -> tuple[str, list[str]]:
+    """Remove sentences that read out internal instructions or tool names ('Say goodbye, call end_call.')."""
+    sentences = re.split(r"(?<=[.!?])\s+", (text or "").strip())
+    removed = [s for s in sentences if _TOOL_TALK.search(s)]
+    if not removed:
+        return text, []
+    return " ".join(s for s in sentences if s not in removed).strip(), removed

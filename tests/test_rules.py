@@ -12,8 +12,8 @@ from llmtest.agent import Agent
 from llmtest.crm import CsvCRM
 from llmtest.ollama_client import OllamaClient
 from llmtest.postcall import post_call_check
-from llmtest.rules import (SAFE_PRICE_LINE, derive_status, guard_money, interest_from_timeline, is_vague_area,
-                           money_amounts, resolve_callback)
+from llmtest.rules import (SAFE_PRICE_LINE, derive_status, guard_money, guard_tool_talk, interest_from_timeline,
+                           is_vague_area, money_amounts, resolve_callback)
 from llmtest.tools import ToolExecutor
 from tests.fake_ollama import FakeOllama, tool_call
 
@@ -106,6 +106,60 @@ class Tools(Base):
         self.assertIn("Monday 19 October at 10:00", t.execute("schedule_callback", {"day": "next monday", "time": "10:00"}))
         self.assertEqual(self.crm.get("L008")["callback_at"], "2026-10-19T10:00")
         self.assertIn("Not saved", t.execute("schedule_callback", {"day": "yesterday", "time": "10:00"}))
+
+
+class SecondRun(Base):
+    """Failures from the second qwen3:8b run (20261015-160921)."""
+
+    def test_placeholders_do_not_block_the_status(self):
+        t = ToolExecutor(self.crm, "L002", NOW)  # scenario 02: 'unknown' values made the whole update fail
+        result = t.execute("update_lead", {"status": "not_interested", "preferred_area": "unknown",
+                                           "property_type": "unknown", "budget_aed": 0, "timeline": "unknown",
+                                           "interest_level": "cold"})
+        row = self.crm.get("L002")
+        self.assertEqual((row["status"], row["property_type"], row["budget_aed"], row["interest_level"]),
+                         ("not_interested", "", "", ""))
+        self.assertTrue(result.startswith("Saved: status"))
+
+    def test_valid_fields_saved_when_another_is_invalid(self):
+        t = ToolExecutor(self.crm, "L001", NOW)
+        result = t.execute("update_lead", {"budget_aed": 2000000, "property_type": "castle"})
+        self.assertEqual(self.crm.get("L001")["budget_aed"], "2000000")
+        self.assertIn("property_type must be one of", result)
+
+    def test_end_call_sent_back_once_while_details_are_missing(self):
+        t = ToolExecutor(self.crm, "L009", NOW)  # scenario 09: hung up after "maybe in two years"
+        t.last_lead_text = "Kind of. I'm just browsing for now, maybe in two years."
+        t.execute("update_lead", {"timeline": "in two years", "status": "interested"})
+        first = t.execute("end_call", {"summary": "browsing"})
+        self.assertIn("Not ended", first)
+        self.assertIn("budget", first)
+        self.assertFalse(t.ended)
+        t.execute("end_call", {"summary": "browsing"})  # the model insists: accepted
+        self.assertTrue(t.ended)
+
+    def test_end_call_accepted_when_the_lead_says_bye_or_is_done(self):
+        for lead_id, text, args in (("L011", "OK, bye.", {"budget_aed": 3000000}),
+                                    ("L002", "No, not interested.", {"status": "not_interested"})):
+            t = ToolExecutor(self.crm, lead_id, NOW)
+            t.last_lead_text = text
+            t.execute("update_lead", args)
+            t.execute("end_call", {"summary": "done"})
+            self.assertTrue(t.ended, lead_id)
+
+    def test_instructions_are_never_spoken(self):
+        text = "I can't share the exact prices. A consultant will be in touch soon. Say goodbye, call end_call."
+        clean, removed = guard_tool_talk(text)
+        self.assertEqual(clean, "I can't share the exact prices. A consultant will be in touch soon.")
+        self.assertEqual(removed, ["Say goodbye, call end_call."])
+
+    def test_post_call_marks_not_interested(self):
+        found = {"still_interested": False, "budget_aed": None, "preferred_area": None, "property_type": None,
+                 "timeline": None}
+        with FakeOllama(lambda b: {"content": json.dumps(found)}) as fake:
+            post_call_check(OllamaClient(fake.url), "qwen3:8b", self.crm, "L002",
+                            [{"type": "lead", "text": "Not interested."}], num_ctx=2048)
+        self.assertEqual(self.crm.get("L002")["status"], "not_interested")
 
 
 class PriceGuard(unittest.TestCase):

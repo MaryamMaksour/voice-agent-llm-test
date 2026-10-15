@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .crm import INTEREST_LEVELS, PROPERTY_TYPES, CRMError, CsvCRM
-from .rules import apply_rules, is_vague_area, resolve_callback
+from .crm import INTEREST_LEVELS, PROPERTY_TYPES, CRMError, CsvCRM, validate_changes
+from .rules import (DETAIL_FIELDS, OPEN_STATUSES, apply_rules, is_placeholder, is_vague_area, lead_wants_to_stop,
+                    resolve_callback)
 
 # "qualified" is not offered: the code sets it once all four details are known (rules.derive_status)
 STATUS_CHOICES = ["interested", "not_interested", "wrong_number"]
@@ -94,25 +95,38 @@ class ToolExecutor:
         self.ended = False
         self.actions: list[dict] = []  # audit trail of every successful CRM write
         self.last_rules: dict = {}     # what the business rules changed after the last tool call
+        self.last_lead_text = ""       # set by the agent before each turn; used by the end_call check
+        self.end_call_bounced = False  # a too-early end_call is sent back once, never twice
 
     def execute(self, name: str, args: dict) -> str:
         """Run one tool. Always returns a short text result for the model (errors included)."""
         self.last_rules = {}
         try:
             if name == "update_lead":
-                args = dict(args)
-                note = ""
+                # drop "unknown" / budget 0 / vague areas, then save every valid field even if another is invalid
+                args = {k: v for k, v in args.items() if not is_placeholder(k, v)}
+                notes = []
                 if is_vague_area(str(args.get("preferred_area") or "")):
                     args.pop("preferred_area")
-                    note = " Area not saved: the lead has no preferred area."
+                    notes.append("Area not saved: the lead has no preferred area.")
+                valid = {}
+                for key, value in args.items():
+                    try:
+                        valid.update(validate_changes({key: value}))
+                    except CRMError as e:
+                        notes.append(f"Not saved: {e}.")
                 row_before = self.crm.get(self.lead_id)
-                self.crm.update(self.lead_id, args)
-                changed = {k: v for k, v in args.items() if v not in (None, "") and str(row_before.get(k)) != str(v)}
-                self._log(name, args)
+                if "interest_level" in valid and not (valid.get("timeline") or row_before.get("timeline")):
+                    valid.pop("interest_level")  # interest comes from the timeline; none given, so none saved
+                if not valid:
+                    return " ".join(notes) or "Nothing to save."
+                self.crm.update(self.lead_id, valid)
+                changed = [k for k, v in valid.items() if str(row_before.get(k)) != str(v)]
+                self._log(name, valid)
                 self.last_rules = apply_rules(self.crm, self.lead_id)
                 if self.last_rules:
                     self._log("rules", self.last_rules)
-                return f"Saved: {', '.join(changed) or 'no change'}.{note}"
+                return " ".join([f"Saved: {', '.join(changed) or 'no change'}.", *notes])
             if name == "schedule_callback":
                 try:
                     if args.get("day"):
@@ -131,6 +145,9 @@ class ToolExecutor:
                 self._log(name, {})
                 return "Marked as do-not-call."
             if name == "end_call":
+                early = self._ending_too_early()
+                if early:
+                    return early
                 summary = str(args.get("summary", "")).strip() or "(no summary)"
                 self.crm.add_note(self.lead_id, summary)
                 self.ended = True
@@ -139,6 +156,18 @@ class ToolExecutor:
             return f"Unknown tool '{name}'. Available: update_lead, schedule_callback, mark_do_not_call, end_call."
         except CRMError as e:
             return f"Not saved: {e}"
+
+    def _ending_too_early(self) -> str:
+        """Send back the first end_call while the lead is still talking and details are missing."""
+        row = self.crm.get(self.lead_id)
+        missing = [f.replace("_aed", "").replace("_", " ") for f in DETAIL_FIELDS if not (row.get(f) or "").strip()]
+        if (self.end_call_bounced or not missing or row.get("status") not in OPEN_STATUSES
+                or row.get("do_not_call") == "true" or lead_wants_to_stop(self.last_lead_text)):
+            return ""
+        self.end_call_bounced = True
+        return (f"Not ended: the lead is still on the line and these details are missing: {', '.join(missing)}. "
+                "Ask for the next one. If the lead is not interested, save status not_interested first. "
+                "If the lead refuses or wants to stop, say goodbye and call end_call again.")
 
     def _log(self, name: str, args: dict) -> None:
         self.actions.append({"tool": name, "args": args})

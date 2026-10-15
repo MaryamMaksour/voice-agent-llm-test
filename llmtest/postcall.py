@@ -70,8 +70,11 @@ def post_call_check(client: OllamaClient, model: str, crm: CsvCRM, lead_id: str,
             fills.update(validate_changes({field: value}))
         except CRMError:
             continue  # e.g. a property type outside the allowed list: better empty than wrong
-    if found.get("still_interested") is True and (row.get("status") or "new") in ("", "new", "contacted"):
+    fresh = (row.get("status") or "new") in ("", "new", "contacted")
+    if found.get("still_interested") is True and fresh:
         fills["status"] = "interested"
+    elif found.get("still_interested") is False and fresh and len(missing) == len(DETAIL_FIELDS) and not fills:
+        fills["status"] = "not_interested"
     if fills:
         crm.update(lead_id, fills)
     changed = fills | apply_rules(crm, lead_id)

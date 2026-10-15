@@ -9,7 +9,7 @@ from datetime import datetime
 from .crm import CsvCRM
 from .ollama_client import OllamaClient
 from .prompts import agent_system_prompt
-from .rules import guard_money, money_amounts
+from .rules import guard_money, guard_tool_talk, money_amounts
 from .tools import TOOL_SCHEMAS, ToolExecutor
 
 
@@ -20,7 +20,7 @@ class AgentTurn:
     ended: bool = False
     model_seconds: float = 0.0
     error: str = ""
-    guarded: list = field(default_factory=list)  # sentences removed by the money guard
+    guarded: list = field(default_factory=list)  # sentences removed by the guards (prices, tool talk)
 
 
 class Agent:
@@ -41,6 +41,7 @@ class Agent:
     def respond(self, lead_text: str) -> AgentTurn:
         """Give the agent what the lead just said; return what the agent says back."""
         self.messages.append({"role": "user", "content": lead_text})
+        self.tools.last_lead_text = lead_text
         turn = AgentTurn(text="")
         spoken: list[str] = []
         for _ in range(self.max_tool_rounds):
@@ -49,7 +50,9 @@ class Agent:
             turn.model_seconds += res.seconds
             content = res.content
             if content:
+                content, talk = guard_tool_talk(content)
                 content, removed = guard_money(content, self._lead_amounts())
+                removed = talk + removed
                 if removed:
                     # the history must match what the lead heard, or the model repeats the price later;
                     # keep any tool call the model wrote as text

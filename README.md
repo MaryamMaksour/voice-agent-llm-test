@@ -68,7 +68,10 @@ The first `qwen3:8b` run showed the model understands the lead well but is unrel
 | Callback date | The model passes the day as said ("next monday", "tomorrow") and the time; the code works out the exact date | 08 |
 | Area | "Anywhere", "I don't mind" and similar are never saved as an area | 11 |
 | Price guard | A spoken sentence with an amount of money the lead never said is replaced by "A property consultant will share the exact prices and details with you." | 11 |
-| Post-call check | One more model pass over the conversation fills details that were said but not saved | 12 |
+| Post-call check | One more model pass over the conversation fills details that were said but not saved, and marks `not_interested` when the lead clearly said so | 12, 02 |
+| Partial saves | Placeholders such as "unknown" or a budget of 0 are dropped, and one invalid field no longer blocks the valid ones | 02 (second run) |
+| Early hang-up | The first `end_call` is sent back while the lead is still talking and details are missing; a second one is accepted | 09, 11 (second run) |
+| Tool talk | A spoken sentence that reads out instructions or tool names ("Say goodbye, call end_call.") is removed | 11 (second run) |
 
 The report shows how often the code had to step in (**Price guard** and **Post-call fills** columns), and every log shows it as `[note]` lines. To measure what the model saves on its own, run with `--no-post-call`.
 
