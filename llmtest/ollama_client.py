@@ -25,6 +25,21 @@ class ChatResult:
     seconds: float = 0.0
     prompt_tokens: int = 0
     output_tokens: int = 0
+    # where the time went, from Ollama's own timings (0 when the server doesn't report them)
+    load_seconds: float = 0.0       # loading the model into memory (a "cold start")
+    prompt_seconds: float = 0.0     # reading the prompt: grows with the length of the conversation
+    generate_seconds: float = 0.0   # writing the reply: grows with the number of output tokens
+    thinking: str = ""              # the model's thinking text, if it produced any (it is never spoken)
+    tool_calls_as_text: bool = False  # the model wrote its tool call as text instead of a real tool call
+
+
+def thinking_text(text: str) -> str:
+    """The text inside <think>...</think>, which clean_text removes before anything is spoken."""
+    return "\n".join(m.strip() for m in re.findall(r"<think>(.*?)</think>", text or "", re.DOTALL) if m.strip())
+
+
+def _seconds(ns) -> float:
+    return round((ns or 0) / 1e9, 3)
 
 
 def clean_text(text: str) -> str:
@@ -110,9 +125,11 @@ class OllamaClient:
             fn = tc.get("function", {})
             if fn.get("name"):
                 calls.append({"name": fn["name"], "arguments": _parse_arguments(fn.get("arguments"))})
+        as_text = False
         if not calls:
             # some models write the tool call as text: <tool_call>{"name":..,"arguments":..}</tool_call>
             for m in _TOOL_IN_TEXT.finditer(content):
+                as_text = True
                 try:
                     obj = json.loads(m.group(1))
                     calls.append({"name": obj.get("name", ""), "arguments": _parse_arguments(obj.get("arguments"))})
@@ -128,4 +145,9 @@ class OllamaClient:
             seconds=seconds,
             prompt_tokens=data.get("prompt_eval_count", 0) or 0,
             output_tokens=data.get("eval_count", 0) or 0,
+            load_seconds=_seconds(data.get("load_duration")),
+            prompt_seconds=_seconds(data.get("prompt_eval_duration")),
+            generate_seconds=_seconds(data.get("eval_duration")),
+            thinking=(msg.get("thinking") or "").strip() or thinking_text(content),
+            tool_calls_as_text=as_text and bool(calls),
         )

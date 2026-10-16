@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from datetime import datetime
 
 import config
@@ -24,9 +25,11 @@ from llmtest.conversation import run_call
 from llmtest.crm import CsvCRM
 from llmtest.evaluate import evaluate
 from llmtest.ollama_client import OllamaClient, OllamaError
+from llmtest.outcome import classify_call
 from llmtest.postcall import post_call_check
 from llmtest.report import summarize, write_reports
 from llmtest.transcript import Transcript
+from llmtest.versions import code_version, prompt_version
 
 
 def slug(text: str) -> str:
@@ -75,6 +78,10 @@ def main() -> int:
     os.makedirs(run_dir, exist_ok=True)
     print(f"Run folder: {run_dir}\nModels: {models}  Modes: {modes}  Scenarios: {len(scenarios)}\n")
 
+    versions = {"prompt_version": prompt_version(), "code_version": code_version()}
+    settings = {"temperature": config.AGENT_TEMPERATURE, "num_ctx": config.NUM_CTX, "max_turns": config.MAX_TURNS,
+                "max_tool_rounds": config.MAX_TOOL_ROUNDS, "post_call_check": post_call,
+                "caller_model": args.caller_model}
     results = []
     for model in models:
         for mode in modes:
@@ -92,9 +99,10 @@ def main() -> int:
                               SimulatedCaller(client, args.caller_model, sc["persona"],
                                               config.CALLER_TEMPERATURE, config.NUM_CTX))
                     log = Transcript(os.path.join(folder, "logs"), sc["id"], {
-                        "model": model, "mode": tag, "scenario": sc["id"], "tests": sc["what_it_tests"],
+                        "call_id": uuid.uuid4().hex[:12], "model": model, "mode": tag, "repeat": rep,
+                        "scenario": sc["id"], "tests": sc["what_it_tests"],
                         "lead": f"{sc['lead_id']} {crm.get(sc['lead_id'])['name']}",
-                        "simulated_now": config.SIMULATED_NOW})
+                        "simulated_now": config.SIMULATED_NOW, **versions, "settings": settings})
                     call = run_call(agent, caller, log, config.MAX_TURNS)
                     if post_call and call.ended_by != "error":
                         _, line = post_call_check(client, model, crm, sc["lead_id"], log.events,
@@ -103,6 +111,7 @@ def main() -> int:
                     final_row = crm.get(sc["lead_id"])
                     ev = evaluate(sc, final_row, log.events, call.ended_by)
                     log.close({"passed": ev["passed"], "ended_by": call.ended_by,
+                               **classify_call(final_row, call.ended_by),
                                "final_crm_row": json.dumps(final_row, ensure_ascii=False),
                                "wrong_fields": [f["field"] for f in ev["fields"] if not f["ok"]]})
                     results.append({"model": model, "mode": tag, "scenario": sc["id"], "evaluation": ev,

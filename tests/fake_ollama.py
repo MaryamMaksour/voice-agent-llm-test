@@ -42,7 +42,9 @@ class FakeOllama:
                     self._send(400, {"error": "think value not supported"})
                     return
                 msg = {"role": "assistant", "content": "", **outer.policy(body)}
-                self._send(200, {"message": msg, "prompt_eval_count": 10, "eval_count": 5})
+                self._send(200, {"message": msg, "prompt_eval_count": 10, "eval_count": 5,
+                                 "load_duration": 2_000_000, "prompt_eval_duration": 30_000_000,
+                                 "eval_duration": 50_000_000})
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"

@@ -201,6 +201,22 @@ runs/20261014-101500/
     └── simulated/ ...
 ```
 
+### What each call log (`.jsonl`) records
+The [EV Agent Dashboard](https://github.com/MaryamMaksour/ev-agent-dashboard) reads these files.
+
+| Line | Fields |
+|---|---|
+| `header` | `call_id`, model, mode, repeat, scenario, lead, `prompt_version` (changes when `prompts.py` changes), `code_version` (git commit), `settings` (temperature, context, max turns, max tool rounds, post-call check, caller model) |
+| `lead` | what the lead said |
+| `agent` | what the agent said · `reply_seconds` (how long the lead waited) · `model_seconds` · `rounds`: one entry per model call with `seconds`, `load_seconds` (model loading), `prompt_seconds` (reading the conversation), `generate_seconds` (writing the reply), tokens in/out, tools it asked for, whether it wrote a tool call as text, thinking length · `thinking` (only if the model produced any) |
+| `tool` | tool, arguments, result, `seconds`, `ok` (false when the call was rejected) |
+| `note` | rules, guards, post-call check |
+| `footer` | `duration_seconds` (whole call), `ended_by`, `agent_closed`, `ending`, `result` (lead status after the call), `classification` (Qualified / Interested, details missing / Callback booked / Not interested / Do not call / Wrong number / No result saved), `passed`, `wrong_fields`, `final_crm_row` |
+
+Every `time` is local time with its UTC offset, for example `2026-10-16T10:15:02+04:00`.
+
+Thinking is off (`think=false`), so most replies have no thinking. If a model still writes `<think>` text, it is never spoken, but it is kept in the log because it slows the reply.
+
 ## 7. Reading the result
 | Result | Decision |
 |---|---|

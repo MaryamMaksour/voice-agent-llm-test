@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -11,6 +12,8 @@ from .ollama_client import OllamaClient
 from .prompts import agent_system_prompt
 from .rules import guard_money, guard_tool_talk, money_amounts
 from .tools import TOOL_SCHEMAS, ToolExecutor
+
+REJECTED_PREFIXES = ("Not saved", "Unknown tool", "Not ended")
 
 
 @dataclass
@@ -21,6 +24,9 @@ class AgentTurn:
     model_seconds: float = 0.0
     error: str = ""
     guarded: list = field(default_factory=list)  # sentences removed by the guards (prices, tool talk)
+    reply_seconds: float = 0.0  # how long the lead waited: every model call + every tool, start to finish
+    rounds: list = field(default_factory=list)   # one entry per model call in this reply (timings, tokens, tools)
+    thinking: list = field(default_factory=list)  # thinking text the model produced (never spoken)
 
 
 class Agent:
@@ -43,11 +49,21 @@ class Agent:
         self.messages.append({"role": "user", "content": lead_text})
         self.tools.last_lead_text = lead_text
         turn = AgentTurn(text="")
+        started = time.perf_counter()
         spoken: list[str] = []
         for _ in range(self.max_tool_rounds):
             res = self.client.chat(self.model, self.messages, tools=TOOL_SCHEMAS,
                                    temperature=self.temperature, num_ctx=self.num_ctx)
             turn.model_seconds += res.seconds
+            turn.rounds.append({
+                "seconds": round(res.seconds, 3), "load_seconds": res.load_seconds,
+                "prompt_seconds": res.prompt_seconds, "generate_seconds": res.generate_seconds,
+                "prompt_tokens": res.prompt_tokens, "output_tokens": res.output_tokens,
+                "tool_calls": [c["name"] for c in res.tool_calls], "tool_calls_as_text": res.tool_calls_as_text,
+                "thinking_chars": len(res.thinking),
+            })
+            if res.thinking:
+                turn.thinking.append(res.thinking)
             content = res.content
             if content:
                 content, talk = guard_tool_talk(content)
@@ -65,9 +81,12 @@ class Agent:
             if not res.tool_calls:
                 break
             for call in res.tool_calls:
+                t0 = time.perf_counter()
                 result = self.tools.execute(call["name"], call["arguments"])
                 turn.tool_events.append({"tool": call["name"], "args": call["arguments"], "result": result,
-                                         "rules": self.tools.last_rules})
+                                         "rules": self.tools.last_rules,
+                                         "seconds": round(time.perf_counter() - t0, 3),
+                                         "ok": not result.startswith(REJECTED_PREFIXES)})
                 self.messages.append({"role": "tool", "content": result, "tool_name": call["name"]})
             if self.tools.ended:
                 break  # end_call was the last action; whatever was said before it is the goodbye
@@ -75,6 +94,7 @@ class Agent:
             turn.error = f"stopped after {self.max_tool_rounds} tool rounds without a spoken reply"
         turn.text = " ".join(spoken).strip()
         turn.ended = self.tools.ended
+        turn.reply_seconds = round(time.perf_counter() - started, 3)
         return turn
 
     def _lead_amounts(self) -> set[int]:
